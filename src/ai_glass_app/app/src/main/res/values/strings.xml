@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">LightMem-Ego</string>
+    <string name="app_name">LightMem Capture</string>
     <string name="permission_record_audio_rationale">Microphone permission is required to capture audio.</string>
     <string name="permission_camera_rationale">Camera permission is required to capture the scene.</string>
     <string name="permission_denied_record_audio">Microphone permission was not granted.</string>

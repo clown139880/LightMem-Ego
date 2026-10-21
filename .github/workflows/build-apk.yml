@@ -9,7 +9,7 @@ on:
         default: 'https://rokid.uniclown.com/api'
         type: string
       separate_package:
-        description: 'Use the .custom package so the original app can remain installed'
+        description: 'Use the .capture package so the original app can remain installed'
         required: true
         default: true
         type: boolean
@@ -93,7 +93,7 @@ jobs:
               gradle, count = re.subn(
                   pattern,
                   lambda match: match.group(0) + "\n" + match.group(1)
-                  + '    applicationIdSuffix = ".custom"',
+                  + '    applicationIdSuffix = ".capture"',
                   gradle,
               )
               if count != 1:
@@ -102,7 +102,7 @@ jobs:
 
           config.write_text(updated, encoding="utf-8")
           print("Backend configured; package:",
-                "cn.zjukg.lightmem.glass.custom" if separate else "cn.zjukg.lightmem.glass")
+                "cn.zjukg.lightmem.glass.capture" if separate else "cn.zjukg.lightmem.glass")
           PY
 
       - name: Restore an optional persistent debug signing key

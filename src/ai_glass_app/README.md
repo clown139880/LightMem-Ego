@@ -136,6 +136,8 @@ The backend must be started with `input_mode=rokid_frame_audio`, and it never ca
 
 For screen text, the camera requests center auto-exposure metering when the device supports it. Exposure compensation is applied through CameraX, without darkening an already overexposed JPEG. Actual camera support must be checked on the glasses. A successful APK build does not confirm that the hardware accepts 1080p or negative EV.
 
+The fork's CI builds this test client as **LightMem Capture**, package `cn.zjukg.lightmem.glass.capture`, when `separate_package=true`. It can be installed alongside the earlier `.custom` build even when their signing certificates differ. Stop capture in the earlier app before opening this one.
+
 To retain this image detail during current/recent-frame answers, set backend `EM2MEM_QUERY_IMAGE_MAX_EDGE=1920` and `EM2MEM_QUERY_IMAGE_JPEG_QUALITY=92`, then recreate the API and worker containers. Other captioning/memory paths can still have their own image limits.
 
 ## 📁 Project Layout
