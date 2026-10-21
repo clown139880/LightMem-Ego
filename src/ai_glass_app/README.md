@@ -106,6 +106,8 @@ There are two ways to ask:
 | Touchpad, one-finger long press | Start or stop the real-time capture session. |
 | Touchpad, one-finger click (running) | Ask the currently selected preset question. |
 | Touchpad, one-finger double click | Select the next preset question. |
+| Touchpad, two-finger click | Cycle exposure compensation through 0 / -1 / -2 / -3 EV; the selection is remembered. |
+| Touchpad, two-finger double click (stopped) | Exit the app. Stop capture with a one-finger long press first. |
 | Touchpad, two-finger long press | Show the next answer page when an answer has multiple pages. |
 | Physical temple button (running) | Start recording a voice question; press again to stop and submit it. |
 
@@ -121,6 +123,9 @@ Backend endpoint, input mode, preset questions, and capture rates live in one fi
 | `INPUT_MODE` | `rokid_frame_audio` | Matches the backend's Rokid adapter path. |
 | `PRESET_QUESTIONS` | Four everyday questions | Edit the list to suit your scenario. |
 | `FRAME_INTERVAL_MS` | `1000` | Frame upload cadence. |
+| `FRAME_CAPTURE_WIDTH` / `FRAME_CAPTURE_HEIGHT` | `1920` / `1080` | Preferred camera resolution; CameraX falls back to a supported size. The header shows the actual encoded frame size once capture starts. |
+| `JPEG_QUALITY` | `92` | JPEG quality of uploaded frames. |
+| `EXPOSURE_PRESETS_EV` | `0, -1, -2, -3` | Screen capture starts at -2 EV. The header shows the applied, hardware-clamped EV, or reports unsupported/failed adjustment. |
 | `AUDIO_CHUNK_MS` | `1000` | Audio chunk length. |
 | `ANSWER_TTS_ENABLED` | `false` | Set `true` to speak answers aloud. |
 
@@ -128,6 +133,10 @@ Backend endpoint, input mode, preset questions, and capture rates live in one fi
 > `API_BASE_URL` points at our hosted demo server by default. Change it to your own backend before capturing anything you would not want to upload elsewhere.
 
 The backend must be started with `input_mode=rokid_frame_audio`, and it never calls the Rokid SDK — it reuses the standard stream, current-memory, short-term-memory, and query paths. See [`../backend/README.md`](../backend/README.md) for the API contract and timestamp rule.
+
+For screen text, the camera requests center auto-exposure metering when the device supports it. Exposure compensation is applied through CameraX, without darkening an already overexposed JPEG. Actual camera support must be checked on the glasses. A successful APK build does not confirm that the hardware accepts 1080p or negative EV.
+
+To retain this image detail during current/recent-frame answers, set backend `EM2MEM_QUERY_IMAGE_MAX_EDGE=1920` and `EM2MEM_QUERY_IMAGE_JPEG_QUALITY=92`, then recreate the API and worker containers. Other captioning/memory paths can still have their own image limits.
 
 ## 📁 Project Layout
 

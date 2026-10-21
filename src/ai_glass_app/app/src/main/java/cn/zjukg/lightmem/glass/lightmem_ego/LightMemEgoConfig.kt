@@ -10,14 +10,16 @@ object LightMemEgoConfig {
         "Summarize everything so far.",
     )
     const val FRAME_INTERVAL_MS = 1_000L
-    const val FRAME_CAPTURE_WIDTH = 640
-    const val FRAME_CAPTURE_HEIGHT = 360
+    const val FRAME_CAPTURE_WIDTH = 1920
+    const val FRAME_CAPTURE_HEIGHT = 1080
+    val EXPOSURE_PRESETS_EV = listOf(0.0, -1.0, -2.0, -3.0)
+    const val DEFAULT_EXPOSURE_PRESET = 2
     const val AUDIO_CHUNK_MS = 1_000L
     const val STATUS_POLL_MS = 2_000L
     const val HTTP_READ_TIMEOUT_MS = 120_000
     const val QUERY_POLL_TIMEOUT_MS = 120_000L
     const val QUERY_POLL_INTERVAL_MS = 900L
-    const val JPEG_QUALITY = 75
+    const val JPEG_QUALITY = 92
     const val AUDIO_SAMPLE_RATE = 16_000
     const val ROKID_CHANNEL_COUNT = 8
     const val ANSWER_TTS_ENABLED = false

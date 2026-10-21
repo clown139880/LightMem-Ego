@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import base64
+import io
 import sys
 import types
 import unittest
@@ -12,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from online_query import query_engine
 from em2mem.llm import LLMModel
 from em2mem.llm import openai_gpt
+from PIL import Image
 
 
 class ShortTermAnswerModelTests(unittest.TestCase):
@@ -38,6 +41,7 @@ class ShortTermAnswerModelTests(unittest.TestCase):
         constructor.assert_called_once_with(
             model_name="hermes-agent", provider="openai", fps=1, max_retries=3,
             api_key="test-remote-key", base_url="http://127.0.0.1:8642/v1", local_mode=False,
+            max_size=(512, 512), quality=85,
         )
 
     def test_local_profile_keeps_its_separate_endpoint(self) -> None:
@@ -65,6 +69,24 @@ class ShortTermAnswerModelTests(unittest.TestCase):
             )
         self.assertEqual(model.provider, "openai")
         self.assertEqual(model.model.model_name, "hermes-agent")
+
+    def test_configured_image_detail_is_preserved_without_upscaling(self) -> None:
+        env = {
+            "EM2MEM_QUERY_RESPOND_MODEL": "qwen3.8-27b-uncensored",
+            "OPENAI_API_KEY": "test-key",
+            "OPENAI_BASE_URL": "http://modeldeck.example/v1",
+            "EM2MEM_QUERY_IMAGE_MAX_EDGE": "1920",
+            "EM2MEM_QUERY_IMAGE_JPEG_QUALITY": "92",
+        }
+        with patch.dict(os.environ, env, clear=True), patch.object(openai_gpt, "OpenAI"), patch.object(
+            openai_gpt, "AsyncOpenAI"
+        ):
+            model = query_engine._get_short_term_answer_model()
+            for original_size, expected_size in [((2560, 1440), (1920, 1080)), ((640, 360), (640, 360))]:
+                with self.subTest(original_size=original_size), Image.new("RGB", original_size, "white") as original:
+                    encoded = model.model.encode_image(original)
+                    with Image.open(io.BytesIO(base64.b64decode(encoded))) as sent:
+                        self.assertEqual(sent.size, expected_size)
 
 
 if __name__ == "__main__":

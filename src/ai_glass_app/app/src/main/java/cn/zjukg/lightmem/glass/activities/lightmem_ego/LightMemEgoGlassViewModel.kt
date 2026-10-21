@@ -49,6 +49,8 @@ data class LightMemEgoGlassUiState(
     val cameraGranted: Boolean = false,
     val audioGranted: Boolean = false,
     val cameraReady: Boolean = false,
+    val captureWidth: Int = 0,
+    val captureHeight: Int = 0,
     val running: Boolean = false,
     val canAsk: Boolean = false,
     val memoryReady: Boolean = false,
@@ -668,7 +670,10 @@ class LightMemEgoGlassViewModel(application: Application) : AndroidViewModel(app
         frameUploadInFlight = true
         val frameIndex = _uiState.value.frameIndex
         val relativeTsMs = relativeElapsedMs()
-        _uiState.update { it.copy(frameIndex = frameIndex + 1) }
+        if (_uiState.value.captureWidth != width || _uiState.value.captureHeight != height) {
+            LightMemEgoDiagnostics.log(getApplication(), "camera-frame-size", "width=$width height=$height jpegQuality=${LightMemEgoConfig.JPEG_QUALITY}")
+        }
+        _uiState.update { it.copy(frameIndex = frameIndex + 1, captureWidth = width, captureHeight = height) }
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
                 api.uploadFrame(
