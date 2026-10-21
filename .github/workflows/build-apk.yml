@@ -112,7 +112,9 @@ jobs:
         run: |
           python3 - <<'PY'
           import base64
+          import hashlib
           import os
+          import subprocess
           from pathlib import Path
 
           encoded = os.environ.get("LIGHTMEM_DEBUG_KEYSTORE_B64", "").strip()
@@ -121,6 +123,13 @@ jobs:
               target.parent.mkdir(parents=True, exist_ok=True)
               target.write_bytes(base64.b64decode("".join(encoded.split()), validate=True))
               target.chmod(0o600)
+              certificate = subprocess.check_output([
+                  "keytool", "-exportcert", "-keystore", str(target),
+                  "-storepass", "android", "-alias", "androiddebugkey",
+              ])
+              with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+                  env.write(f"LIGHTMEM_DEBUG_STORE_FILE={target}\n")
+                  env.write(f"LIGHTMEM_DEBUG_CERT_SHA256={hashlib.sha256(certificate).hexdigest()}\n")
               print("Using the repository's persistent debug signing key.")
           else:
               print("No persistent key configured; Gradle will create a temporary debug key.")
@@ -133,10 +142,44 @@ jobs:
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace :app:testDebugUnitTest :app:assembleDebug
 
+      - name: Verify the APK uses the configured signing certificate
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+
+          apk = Path("src/ai_glass_app/app/build/outputs/apk/debug/app-debug.apk")
+          sdk = Path(os.environ.get("ANDROID_SDK_ROOT") or os.environ["ANDROID_HOME"])
+          result = subprocess.run(
+              [str(sdk / "build-tools/36.1.0/apksigner"), "verify", "--verbose", "--print-certs", str(apk)],
+              check=True, capture_output=True, text=True,
+          )
+          match = re.search(r"Signer #1 certificate SHA-256 digest: ([0-9a-fA-F]+)", result.stdout)
+          if not match:
+              raise SystemExit("APK signer certificate was not reported.")
+          actual = match.group(1).lower()
+          expected = os.environ.get("LIGHTMEM_DEBUG_CERT_SHA256", "").lower()
+          if expected and actual != expected:
+              raise SystemExit("APK signing certificate does not match the persistent keystore.")
+          report = {
+              "signature_verified": True,
+              "persistent_key_checked": bool(expected),
+              "certificate_sha256": actual,
+          }
+          apk.with_name("signature-check.json").write_text(json.dumps(report, indent=2) + "\n")
+          print(json.dumps(report))
+          PY
+
       - name: Upload the APK
         uses: actions/upload-artifact@v4
         with:
           name: lightmem-rokid-debug-${{ github.run_number }}
-          path: src/ai_glass_app/app/build/outputs/apk/debug/app-debug.apk
+          path: |
+            src/ai_glass_app/app/build/outputs/apk/debug/app-debug.apk
+            src/ai_glass_app/app/build/outputs/apk/debug/signature-check.json
           if-no-files-found: error
           retention-days: 7

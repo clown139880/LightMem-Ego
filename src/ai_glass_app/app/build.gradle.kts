@@ -37,6 +37,15 @@ android {
     }
 
     signingConfigs {
+        getByName("debug") {
+            val storePath = providers.environmentVariable("LIGHTMEM_DEBUG_STORE_FILE").orNull
+            if (!storePath.isNullOrBlank()) {
+                storeFile = rootProject.file(storePath)
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
         create("release") {
             val storePath = releaseProperty("LIGHTMEM_RELEASE_STORE_FILE")
             if (!storePath.isNullOrBlank()) {
