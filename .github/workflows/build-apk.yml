@@ -1,0 +1,140 @@
+name: Build LightMem Rokid APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      backend_url:
+        description: 'LightMem HTTPS base URL, for example https://lightmem.example.com/api'
+        required: true
+        default: 'https://rokid.uniclown.com/api'
+        type: string
+      separate_package:
+        description: 'Use the .custom package so the original app can remain installed'
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      LIGHTMEM_BACKEND_URL: ${{ inputs.backend_url }}
+      LIGHTMEM_SEPARATE_PACKAGE: ${{ inputs.separate_package }}
+
+    steps:
+      - name: Check out the fork
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+          cache-dependency-path: |
+            src/ai_glass_app/**/*.gradle.kts
+            src/ai_glass_app/gradle/libs.versions.toml
+            src/ai_glass_app/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install the SDK versions requested by the project
+        run: sdkmanager "platform-tools" "platforms;android-36.1" "build-tools;36.1.0"
+
+      - name: Configure the backend and optional custom package
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+          from urllib.parse import urlsplit
+
+          root = Path("src/ai_glass_app")
+          url = os.environ["LIGHTMEM_BACKEND_URL"].strip().rstrip("/")
+          parsed = urlsplit(url)
+          if (
+              parsed.scheme != "https"
+              or not parsed.hostname
+              or parsed.username is not None
+              or parsed.password is not None
+              or parsed.query
+              or parsed.fragment
+              or any(char.isspace() for char in url)
+          ):
+              raise SystemExit("Use an HTTPS LightMem base URL without credentials, query or fragment.")
+          # Validate a port, if supplied.
+          _ = parsed.port
+
+          config = root / "app/src/main/java/cn/zjukg/lightmem/glass/lightmem_ego/LightMemEgoConfig.kt"
+          text = config.read_text(encoding="utf-8")
+          # JSON supplies string quoting; escape Kotlin string-template markers too.
+          literal = json.dumps(url, ensure_ascii=True).replace("$", r"\$")
+          pattern = r'(?m)^(\s*const val API_BASE_URL\s*=\s*)"(?:\\.|[^"\\])*"'
+          updated, count = re.subn(pattern, lambda match: match.group(1) + literal, text)
+          if count != 1:
+              raise SystemExit("Expected exactly one API_BASE_URL; inspect the upstream config before rebuilding.")
+
+          separate = os.environ["LIGHTMEM_SEPARATE_PACKAGE"].lower() == "true"
+          if separate:
+              build = root / "app/build.gradle.kts"
+              gradle = build.read_text(encoding="utf-8")
+              if re.search(r'(?m)^\s*applicationIdSuffix\s*=', gradle):
+                  raise SystemExit("An applicationIdSuffix already exists; review it instead of adding another.")
+              pattern = r'(?m)^([ \t]*)debug[ \t]*\{[ \t]*$'
+              gradle, count = re.subn(
+                  pattern,
+                  lambda match: match.group(0) + "\n" + match.group(1)
+                  + '    applicationIdSuffix = ".custom"',
+                  gradle,
+              )
+              if count != 1:
+                  raise SystemExit("Expected exactly one debug build type; inspect the upstream Gradle file.")
+              build.write_text(gradle, encoding="utf-8")
+
+          config.write_text(updated, encoding="utf-8")
+          print("Backend configured; package:",
+                "cn.zjukg.lightmem.glass.custom" if separate else "cn.zjukg.lightmem.glass")
+          PY
+
+      - name: Restore an optional persistent debug signing key
+        env:
+          LIGHTMEM_DEBUG_KEYSTORE_B64: ${{ secrets.LIGHTMEM_DEBUG_KEYSTORE_B64 }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import base64
+          import os
+          from pathlib import Path
+
+          encoded = os.environ.get("LIGHTMEM_DEBUG_KEYSTORE_B64", "").strip()
+          if encoded:
+              target = Path.home() / ".android/debug.keystore"
+              target.parent.mkdir(parents=True, exist_ok=True)
+              target.write_bytes(base64.b64decode("".join(encoded.split()), validate=True))
+              target.chmod(0o600)
+              print("Using the repository's persistent debug signing key.")
+          else:
+              print("No persistent key configured; Gradle will create a temporary debug key.")
+          PY
+
+      - name: Build the debug APK
+        working-directory: src/ai_glass_app
+        shell: bash
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace :app:assembleDebug
+
+      - name: Upload the APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: lightmem-rokid-debug-${{ github.run_number }}
+          path: src/ai_glass_app/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7

@@ -1,0 +1,22 @@
+# HAL runs its authenticated Hermes API on loopback. Host networking lets the
+# LightMem containers reach it without changing the Hermes listener.
+services:
+  backend-api:
+    network_mode: host
+    ports: !reset []
+    expose: !reset []
+    environment:
+      EM2MEM_API_HOST: 127.0.0.1
+      EM2MEM_API_PORT: 18000
+
+  backend-workers:
+    network_mode: host
+    environment:
+      EM2MEM_API_HOST: 127.0.0.1
+      EM2MEM_API_PORT: 18000
+
+  frontend:
+    network_mode: host
+    ports: !reset []
+    volumes:
+      - ./deploy/hal/nginx.conf:/etc/nginx/conf.d/default.conf:ro
