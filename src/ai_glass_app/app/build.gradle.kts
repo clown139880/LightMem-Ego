@@ -30,13 +30,22 @@ android {
         applicationId = "cn.zjukg.lightmem.glass"
         minSdk = 31
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.0.1"
+        versionCode = 4
+        versionName = "1.0.2-screen"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
+        getByName("debug") {
+            val storePath = providers.environmentVariable("LIGHTMEM_DEBUG_STORE_FILE").orNull
+            if (!storePath.isNullOrBlank()) {
+                storeFile = rootProject.file(storePath)
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
         create("release") {
             val storePath = releaseProperty("LIGHTMEM_RELEASE_STORE_FILE")
             if (!storePath.isNullOrBlank()) {

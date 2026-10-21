@@ -2,6 +2,7 @@ package cn.zjukg.lightmem.glass.camera
 
 import android.content.Context
 import android.util.Log
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.UseCase
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -29,6 +30,7 @@ fun rememberCameraBound(
     onError: (String) -> Unit,
     onUnbind: () -> Unit = {},
     onBound: (Array<out UseCase>) -> Unit = {},
+    onCameraBound: (Camera) -> Unit = {},
     useCases: () -> Array<out UseCase>,
 ): Boolean {
     var ready by remember { mutableStateOf(false) }
@@ -51,11 +53,12 @@ fun rememberCameraBound(
                     provider = p
                     val extras = useCases()
                     p.unbindAll()
-                    p.bindToLifecycle(
+                    val camera = p.bindToLifecycle(
                         lifecycleOwner,
                         CameraSelector.DEFAULT_BACK_CAMERA,
                         *extras,
                     )
+                    onCameraBound(camera)
                     onBound(extras)
                     ready = true
                     onReady()

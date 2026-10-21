@@ -326,7 +326,7 @@ def _answer_language_instruction() -> str:
     return f"Answer in {language}."
 
 
-_SHORT_TERM_ANSWER_MODELS: dict[tuple[str, int, bool, str | None], Any] = {}
+_SHORT_TERM_ANSWER_MODELS: dict[tuple[str, int, bool, str | None, int, int], Any] = {}
 
 
 def _contains_keyword(text: str, keyword: str) -> bool:
@@ -3791,7 +3791,9 @@ def _get_short_term_answer_model() -> Any:
     retries = _env_int("EM2MEM_MCUR_ANSWER_MODEL_RETRIES", _env_int("EM2MEM_QUERY_ANSWER_RETRIES", 3))
     use_local = local_llm_enabled()
     base_url = local_openai_base_url() if use_local else external_openai_base_url()
-    key = (model_name, retries, use_local, base_url)
+    image_max_edge = max(256, min(4096, _env_int("EM2MEM_QUERY_IMAGE_MAX_EDGE", 512)))
+    image_quality = max(1, min(100, _env_int("EM2MEM_QUERY_IMAGE_JPEG_QUALITY", 85)))
+    key = (model_name, retries, use_local, base_url, image_max_edge, image_quality)
     if key not in _SHORT_TERM_ANSWER_MODELS:
         _SHORT_TERM_ANSWER_MODELS[key] = LLMModel(
             model_name=model_name,
@@ -3801,6 +3803,8 @@ def _get_short_term_answer_model() -> Any:
             api_key=local_openai_api_key() if use_local else external_openai_api_key(),
             base_url=base_url,
             local_mode=use_local,
+            max_size=(image_max_edge, image_max_edge),
+            quality=image_quality,
         )
     return _SHORT_TERM_ANSWER_MODELS[key]
 

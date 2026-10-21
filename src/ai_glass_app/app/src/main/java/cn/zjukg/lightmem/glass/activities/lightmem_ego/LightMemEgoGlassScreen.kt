@@ -1,11 +1,16 @@
 package cn.zjukg.lightmem.glass.activities.lightmem_ego
 
 import android.Manifest
+import android.content.Context
 import android.util.Size
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
+import androidx.camera.core.Camera
+import androidx.camera.core.resolutionselector.AspectRatioStrategy
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -38,6 +43,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import cn.zjukg.lightmem.glass.camera.rememberCameraBound
+import cn.zjukg.lightmem.glass.camera.rememberScreenExposureStatus
 import cn.zjukg.lightmem.glass.input.BareKeyEvent
 import cn.zjukg.lightmem.glass.input.RegisterBareKeyHandler
 import cn.zjukg.lightmem.glass.ui.design.BareInfoBlock
@@ -63,6 +69,17 @@ fun LightMemEgoGlassScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val state by viewModel.uiState.collectAsState()
     val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
+    val capturePreferences = remember(context) {
+        context.applicationContext.getSharedPreferences("lightmem_capture", Context.MODE_PRIVATE)
+    }
+    var exposurePreset by remember {
+        mutableIntStateOf(
+            capturePreferences.getInt("exposure_preset", LightMemEgoConfig.DEFAULT_EXPOSURE_PRESET)
+                .coerceIn(LightMemEgoConfig.EXPOSURE_PRESETS_EV.indices),
+        )
+    }
+    var camera by remember { mutableStateOf<Camera?>(null) }
+    val exposureStatus = rememberScreenExposureStatus(camera, LightMemEgoConfig.EXPOSURE_PRESETS_EV[exposurePreset])
     var hasEnteredSessionScreen by remember { mutableStateOf(false) }
     val shouldBindCamera = state.cameraGranted && state.running
     var answerPageIndex by remember { mutableIntStateOf(0) }
@@ -111,11 +128,23 @@ fun LightMemEgoGlassScreen(
         onReady = { viewModel.setCameraReady(true) },
         onError = { viewModel.onFrameConvertFailed(it) },
         onUnbind = {
+            camera = null
             viewModel.setCameraReady(false)
         },
+        onCameraBound = { camera = it },
         useCases = {
             val analyzer = ImageAnalysis.Builder()
-                .setTargetResolution(Size(LightMemEgoConfig.FRAME_CAPTURE_WIDTH, LightMemEgoConfig.FRAME_CAPTURE_HEIGHT))
+                .setResolutionSelector(
+                    ResolutionSelector.Builder()
+                        .setAspectRatioStrategy(AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY)
+                        .setResolutionStrategy(
+                            ResolutionStrategy(
+                                Size(LightMemEgoConfig.FRAME_CAPTURE_WIDTH, LightMemEgoConfig.FRAME_CAPTURE_HEIGHT),
+                                ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER,
+                            ),
+                        )
+                        .build(),
+                )
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
             analyzer.setAnalyzer(analysisExecutor) { image ->
@@ -154,9 +183,12 @@ fun LightMemEgoGlassScreen(
                 true
             }
             BareKeyEvent.TwoFingerClick -> {
+                exposurePreset = (exposurePreset + 1) % LightMemEgoConfig.EXPOSURE_PRESETS_EV.size
+                capturePreferences.edit().putInt("exposure_preset", exposurePreset).apply()
                 true
             }
             BareKeyEvent.TwoFingerDoubleClick -> {
+                if (!state.running) onBack()
                 true
             }
             BareKeyEvent.TwoFingerLongPress -> {
@@ -220,14 +252,22 @@ fun LightMemEgoGlassScreen(
             ?: listOf(AnnotatedString(answerLine))
     }
     val latencyLine = state.answerLatencyMs?.let { "Latency: ${formatAnswerLatency(it)}" }.orEmpty()
+    val captureSizeLabel = if (state.cameraReady && state.captureWidth > 0 && state.captureHeight > 0) {
+        "${state.captureWidth}x${state.captureHeight}"
+    } else {
+        "${LightMemEgoConfig.FRAME_CAPTURE_WIDTH}x${LightMemEgoConfig.FRAME_CAPTURE_HEIGHT} target"
+    }
+    val captureStatus = "$captureSizeLabel | $exposureStatus"
 
     if (!hasEnteredSessionScreen && !state.running) {
         BareScreenLayout(
             title = "LightMem-Ego",
-            subtitle = null,
+            subtitle = captureStatus,
             keyGuide = BareKeyGuide(
                 click = if (state.hasLastSession) "Switch" else null,
                 longPress = "Start",
+                twoFingerClick = "Exposure",
+                twoFingerDoubleClick = "Exit",
             ),
             drawSafeAreaFrame = false,
         ) {
@@ -241,7 +281,7 @@ fun LightMemEgoGlassScreen(
 
     BareScreenLayout(
         title = "LightMem-Ego",
-        subtitle = state.displayDayLabel(),
+        subtitle = captureStatus,
         keyGuide = BareKeyGuide(
             click = "Ask question",
             spriteClick = when {
@@ -250,6 +290,7 @@ fun LightMemEgoGlassScreen(
                 else -> null
             },
             doubleClick = "Next question",
+            twoFingerClick = "Exposure",
             twoFingerLongPress = if (answerPages.size > 1) "Next answer" else null,
             longPress = if (state.running || state.sessionId.isNotBlank()) "Stop" else "Start",
         ),
