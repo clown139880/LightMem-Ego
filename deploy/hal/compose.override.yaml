@@ -8,6 +8,8 @@ services:
     environment:
       EM2MEM_API_HOST: 127.0.0.1
       EM2MEM_API_PORT: 18000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:18000/ping', timeout=3)"]
 
   backend-workers:
     network_mode: host

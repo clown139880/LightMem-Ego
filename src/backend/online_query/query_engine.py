@@ -37,6 +37,7 @@ from online_query.stream_query_context import load_stream_query_context
 from online_llm_config import (
     external_openai_api_key,
     external_openai_base_url,
+    local_llm_enabled,
     local_openai_api_key,
     local_openai_base_url,
 )
@@ -325,7 +326,7 @@ def _answer_language_instruction() -> str:
     return f"Answer in {language}."
 
 
-_SHORT_TERM_ANSWER_MODELS: dict[tuple[str, int], Any] = {}
+_SHORT_TERM_ANSWER_MODELS: dict[tuple[str, int, bool, str | None], Any] = {}
 
 
 def _contains_keyword(text: str, keyword: str) -> bool:
@@ -3776,6 +3777,9 @@ def _build_short_term_llm_prompt(question: str, short_term_results: list[dict[st
 
 
 def _get_short_term_answer_model() -> Any:
+    # Current-frame answers do not need the optional long-term memory stack.
+    from em2mem.llm import LLMModel
+
     model_name = (
         os.getenv("EM2MEM_MCUR_ANSWER_MODEL")
         or os.getenv("EM2MEM_MST_ANSWER_MODEL")
@@ -3785,17 +3789,18 @@ def _get_short_term_answer_model() -> Any:
         or "gpt-5.4"
     )
     retries = _env_int("EM2MEM_MCUR_ANSWER_MODEL_RETRIES", _env_int("EM2MEM_QUERY_ANSWER_RETRIES", 3))
-    key = (model_name, retries)
+    use_local = local_llm_enabled()
+    base_url = local_openai_base_url() if use_local else external_openai_base_url()
+    key = (model_name, retries, use_local, base_url)
     if key not in _SHORT_TERM_ANSWER_MODELS:
-        _, LLMModel, _, _, _ = _em2mem_classes()
         _SHORT_TERM_ANSWER_MODELS[key] = LLMModel(
             model_name=model_name,
             provider="openai",
             fps=1,
             max_retries=retries,
-            api_key=local_openai_api_key(),
-            base_url=local_openai_base_url(),
-            local_mode=True,
+            api_key=local_openai_api_key() if use_local else external_openai_api_key(),
+            base_url=base_url,
+            local_mode=use_local,
         )
     return _SHORT_TERM_ANSWER_MODELS[key]
 
@@ -3881,6 +3886,15 @@ def _answer_current_memory(
 
     day_context_block = build_day_context_block(day_context)
     prompt_text = build_current_prompt(resolved_question, current_context, selection)
+    agent_sessions_dir = os.getenv("EM2MEM_AGENT_SESSIONS_DIR", "").strip()
+    if agent_sessions_dir and selected_image_paths:
+        agent_paths = [str(Path(agent_sessions_dir) / session_id / path) for path in selected_image_paths]
+        prompt_text = (
+            "The current image inputs are available to your vision tool at these exact absolute paths on your host. "
+            "Use these paths for vision_analyze; memory-package paths below are session-relative identifiers.\n"
+            + json.dumps(agent_paths, ensure_ascii=False)
+            + "\n\n" + prompt_text
+        )
     if day_context_block:
         prompt_text = f"{day_context_block}\n\n{prompt_text}"
     user_content: list[dict[str, Any]] = [{"type": "text", "text": prompt_text}]

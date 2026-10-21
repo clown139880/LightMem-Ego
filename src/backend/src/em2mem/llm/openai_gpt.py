@@ -47,6 +47,7 @@ logger = logging.getLogger(__name__)
 
 # Model configuration
 MODEL_DICT = {
+    "hermes-agent": "hermes-agent",
     "gpt-5": "gpt-5-2025-08-07",
     "gpt-5.1": "gpt-5.1",
     "gpt-5.2": "gpt-5.2",

@@ -39,7 +39,7 @@ class LLMModel:
         model_name_lower = model_name.lower()
         
         # Auto-detect based on model name patterns
-        if "gpt" in model_name_lower:
+        if "gpt" in model_name_lower or model_name_lower == "hermes-agent":
             return "openai"
         elif "qwen3" in model_name_lower:
             return "qwen3vl"
